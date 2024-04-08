@@ -55,6 +55,8 @@ func (r *LocalMessageRouter) SendToPresenceIDs(logger *zap.Logger, presenceIDs [
 		return
 	}
 
+	logger.Info("Hello")
+
 	// Prepare payload variables but do not initialize until we hit a session that needs them to avoid unnecessary work.
 	var payloadProtobuf []byte
 	var payloadJSON []byte
