@@ -77,7 +77,7 @@ func (s *SSA) MarshalJSON() ([]byte, error) {
 	}
 
 	// Marshal Envelope to JSON
-	envelopeJSON, err := protojson.Marshal(s.Envelope)
+	envelopeJSON, err := proto.Marshal(s.Envelope)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func (s *SSA) UnmarshalJSON(data []byte) error {
 	// Unmarshal Envelope if it's not nil
 	// Unmarshal Envelope JSON into Envelope object
 	envelope := &rtapi.Envelope{}
-	if err := protojson.Unmarshal(customSSA.Envelope, envelope); err != nil {
+	if err := proto.Unmarshal(customSSA.Envelope, envelope); err != nil {
 		return err
 	}
 	s.Envelope = envelope
@@ -188,6 +188,8 @@ func (r *LocalMessageRouter) Share(logger *zap.Logger, data SSA) error {
 		logger.Error("error: ", zap.Error(err))
 		return err
 	}
+
+	logger.Info("encoded, %v", zap.String("msg", string(encoded)))
 
 	return r.redis.Publish(context.Background(), "sharing", encoded).Err()
 }
