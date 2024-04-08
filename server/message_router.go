@@ -16,14 +16,11 @@ package server
 
 import (
 	"context"
-	"encoding/json"
-	"github.com/golang/protobuf/jsonpb"
 	"github.com/heroiclabs/nakama-common/rtapi"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"os"
 )
 
 // Deferred message expected to be batched with other deferred messages.
@@ -39,7 +36,7 @@ type MessageRouter interface {
 	SendToPresenceIDs(*zap.Logger, []*PresenceID, *rtapi.Envelope, bool)
 	SendToStream(*zap.Logger, PresenceStream, *rtapi.Envelope, bool)
 	SendDeferred(*zap.Logger, []*DeferredMessage)
-	Share(logger *zap.Logger, data SSA) error
+	Share(logger *zap.Logger, data *rtapi.Envelope) error
 	SendToPresenceIDsNew(*zap.Logger, []*PresenceID, *rtapi.Envelope, bool, bool)
 	SendToPresenceIDsNewA(*zap.Logger, []*PresenceID, *rtapi.Envelope, bool)
 }
@@ -58,85 +55,13 @@ type SSA struct {
 	Reliable    bool            `json:"reliable"`
 }
 
-// MarshalJSON implements the json.Marshaler interface for SSA.
-func (s *SSA) MarshalJSON() ([]byte, error) {
-	type Alias SSA // Define an alias type to avoid recursion in MarshalJSON
-
-	// Custom structure for marshalling SSA
-	type CustomSSA struct {
-		SenderHost  string        `json:"senderHost"`
-		Envelope    string        `json:"envelope"`
-		PresenceIDs []*PresenceID `json:"presenceIDs"`
-		Reliable    bool          `json:"reliable"`
-	}
-
-	marshaller := jsonpb.Marshaler{}
-
-	// Create a custom SSA instance to marshal
-	customSSA := CustomSSA{
-		SenderHost:  s.SenderHost,
-		PresenceIDs: s.PresenceIDs,
-		Reliable:    s.Reliable,
-	}
-
-	// Marshal Envelope to JSON
-	envelopeJSON, err := marshaller.MarshalToString(s.Envelope)
-
-	if err != nil {
-		return nil, err
-	}
-	customSSA.Envelope = envelopeJSON
-
-	// Marshal custom SSA structure to JSON
-	return json.Marshal(&customSSA)
-}
-
-// UnmarshalJSON implements the json.Unmarshaler interface for SSA.
-func (s *SSA) UnmarshalJSON(data []byte) error {
-	// Custom structure for unmarshalling JSON into SSA
-	type CustomSSA struct {
-		SenderHost  string        `json:"senderHost"`
-		Envelope    string        `json:"envelope"`
-		PresenceIDs []*PresenceID `json:"presenceIDs"`
-		Reliable    bool          `json:"reliable"`
-	}
-
-	// Unmarshal JSON into custom SSA structure
-	var customSSA CustomSSA
-	if err := json.Unmarshal(data, &customSSA); err != nil {
-		return err
-	}
-
-	// Assign values from custom SSA structure to SSA
-	s.SenderHost = customSSA.SenderHost
-	s.PresenceIDs = customSSA.PresenceIDs
-	s.Reliable = customSSA.Reliable
-
-	// Unmarshal Envelope if it's not nil
-	// Unmarshal Envelope JSON into Envelope object
-	envelope := &rtapi.Envelope{}
-
-	if err := jsonpb.UnmarshalString(customSSA.Envelope, envelope); err != nil {
-		return err
-	}
-
-	s.Envelope = envelope
-
-	return nil
-}
-
 func (r *LocalMessageRouter) SendToPresenceIDsNewA(logger *zap.Logger, ids []*PresenceID, envelope *rtapi.Envelope, b bool) {
 	r.SendToPresenceIDsNew(logger, ids, envelope, b, false)
 }
 
 func (r *LocalMessageRouter) SendToPresenceIDsNew(logger *zap.Logger, presenceIDs []*PresenceID, envelope *rtapi.Envelope, reliable bool, gossip bool) {
 	if gossip {
-		if err := r.Share(logger, SSA{
-			SenderHost:  os.Getenv("HOSTNAME"),
-			Envelope:    envelope,
-			PresenceIDs: presenceIDs,
-			Reliable:    reliable,
-		}); err != nil {
+		if err := r.Share(logger, envelope); err != nil {
 			logger.Error("error gossiping, %v", zap.Error(err))
 		}
 	}
@@ -188,14 +113,12 @@ func (r *LocalMessageRouter) SendToPresenceIDsNew(logger *zap.Logger, presenceID
 	}
 }
 
-func (r *LocalMessageRouter) Share(logger *zap.Logger, data SSA) error {
-	encoded, err := json.Marshal(data)
+func (r *LocalMessageRouter) Share(logger *zap.Logger, data *rtapi.Envelope) error {
+	encoded, err := proto.Marshal(data)
 	if err != nil {
 		logger.Error("error: ", zap.Error(err))
 		return err
 	}
-
-	logger.Info("encoded, %v", zap.String("msg", string(encoded)))
 
 	return r.redis.Publish(context.Background(), "sharing", encoded).Err()
 }
@@ -224,15 +147,13 @@ func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, 
 		ch := pubsub.Channel()
 
 		for msg := range ch {
-			b := &SSA{}
-			err := json.Unmarshal([]byte(msg.Payload), b)
+			b := &rtapi.Envelope{}
+			err := proto.Unmarshal([]byte(msg.Payload), b)
 			if err != nil {
 				logger.Error("err: ", zap.Error(err))
 			}
-
-			if os.Getenv("HOSTNAME") != b.SenderHost {
-				localMessageRouter.SendToPresenceIDsNewA(logger, b.PresenceIDs, b.Envelope, b.Reliable)
-			}
+			logger.Info("got mesaage", zap.Any("message", b))
+			//localMessageRouter.SendToPresenceIDsNewA(logger, b.PresenceIDs, b.Envelope, b.Reliable)
 
 		}
 	}(localMessageRouter)
