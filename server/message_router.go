@@ -182,7 +182,7 @@ func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, 
 			if err := proto.Unmarshal(b.Envelope, a); err != nil {
 				logger.Error("err1: ", zap.Error(err))
 			}
-			//localMessageRouter.SendToPresenceIDsNewA(logger, b.PresenceIDs, b.Envelope, b.Reliable)
+			localMessageRouter.SendToPresenceIDsNewA(logger, b.PresenceIDs, a, b.Reliable)
 
 		}
 	}(localMessageRouter)
