@@ -50,6 +50,9 @@ type notificationCacheableCursor struct {
 }
 
 func NotificationSend(ctx context.Context, logger *zap.Logger, db *sql.DB, messageRouter MessageRouter, notifications map[uuid.UUID][]*api.Notification) error {
+
+	logger.Info("Here")
+
 	persistentNotifications := make(map[uuid.UUID][]*api.Notification, len(notifications))
 	for userID, ns := range notifications {
 		for _, userNotification := range ns {
