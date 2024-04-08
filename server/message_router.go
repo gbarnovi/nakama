@@ -55,6 +55,7 @@ func (r *LocalMessageRouter) SendToPresenceIDs(logger *zap.Logger, presenceIDs [
 		return
 	}
 
+	logger.Debug("No session to route to", zap.String("sid", "giorgi"))
 	logger.Info("Hello")
 
 	// Prepare payload variables but do not initialize until we hit a session that needs them to avoid unnecessary work.
