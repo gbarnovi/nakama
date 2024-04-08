@@ -66,7 +66,7 @@ github.com/blugelabs/query_string
 # github.com/caio/go-tdigest v3.1.0+incompatible
 ## explicit
 github.com/caio/go-tdigest
-# github.com/cespare/xxhash/v2 v2.2.0
+# github.com/cespare/xxhash/v2 v2.3.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
 # github.com/davecgh/go-spew v1.1.1
