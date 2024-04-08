@@ -77,7 +77,7 @@ func (s *SSA) MarshalJSON() ([]byte, error) {
 	}
 
 	// Marshal Envelope to JSON
-	envelopeJSON, err := proto.Marshal(s.Envelope)
+	envelopeJSON, err := protojson.Marshal(s.Envelope)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func (s *SSA) UnmarshalJSON(data []byte) error {
 	// Unmarshal Envelope if it's not nil
 	// Unmarshal Envelope JSON into Envelope object
 	envelope := &rtapi.Envelope{}
-	if err := proto.Unmarshal(customSSA.Envelope, envelope); err != nil {
+	if err := protojson.Unmarshal(customSSA.Envelope, envelope.GetNotifications()); err != nil {
 		return err
 	}
 	s.Envelope = envelope
