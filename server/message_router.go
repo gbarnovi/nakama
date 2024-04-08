@@ -177,7 +177,7 @@ func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, 
 			if err != nil {
 				logger.Error("err: ", zap.Error(err))
 			}
-			logger.Info("got message", zap.Any("message", b))
+
 			a := &rtapi.Envelope{}
 			if err := proto.Unmarshal(b.Envelope, a); err != nil {
 				logger.Error("err1: ", zap.Error(err))
