@@ -57,6 +57,68 @@ type SSA struct {
 	Reliable    bool            `json:"reliable"`
 }
 
+// MarshalJSON implements the json.Marshaler interface for SSA.
+func (s *SSA) MarshalJSON() ([]byte, error) {
+	type Alias SSA // Define an alias type to avoid recursion in MarshalJSON
+
+	// Custom structure for marshalling SSA
+	type CustomSSA struct {
+		SenderHost  string          `json:"senderHost"`
+		Envelope    json.RawMessage `json:"envelope"`
+		PresenceIDs []*PresenceID   `json:"presenceIDs"`
+		Reliable    bool            `json:"reliable"`
+	}
+
+	// Create a custom SSA instance to marshal
+	customSSA := CustomSSA{
+		SenderHost:  s.SenderHost,
+		PresenceIDs: s.PresenceIDs,
+		Reliable:    s.Reliable,
+	}
+
+	// Marshal Envelope to JSON
+	envelopeJSON, err := proto.Marshal(s.Envelope)
+	if err != nil {
+		return nil, err
+	}
+	customSSA.Envelope = envelopeJSON
+
+	// Marshal custom SSA structure to JSON
+	return json.Marshal(&customSSA)
+}
+
+// UnmarshalJSON implements the json.Unmarshaler interface for SSA.
+func (s *SSA) UnmarshalJSON(data []byte) error {
+	// Custom structure for unmarshalling JSON into SSA
+	type CustomSSA struct {
+		SenderHost  string          `json:"senderHost"`
+		Envelope    json.RawMessage `json:"envelope"`
+		PresenceIDs []*PresenceID   `json:"presenceIDs"`
+		Reliable    bool            `json:"reliable"`
+	}
+
+	// Unmarshal JSON into custom SSA structure
+	var customSSA CustomSSA
+	if err := json.Unmarshal(data, &customSSA); err != nil {
+		return err
+	}
+
+	// Assign values from custom SSA structure to SSA
+	s.SenderHost = customSSA.SenderHost
+	s.PresenceIDs = customSSA.PresenceIDs
+	s.Reliable = customSSA.Reliable
+
+	// Unmarshal Envelope if it's not nil
+	// Unmarshal Envelope JSON into Envelope object
+	envelope := &rtapi.Envelope{}
+	if err := proto.Unmarshal(customSSA.Envelope, envelope); err != nil {
+		return err
+	}
+	s.Envelope = envelope
+
+	return nil
+}
+
 func (r *LocalMessageRouter) SendToPresenceIDsNewA(logger *zap.Logger, ids []*PresenceID, envelope *rtapi.Envelope, b bool) {
 	r.SendToPresenceIDsNew(logger, ids, envelope, b, false)
 }
@@ -160,7 +222,9 @@ func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, 
 				logger.Error("err: ", zap.Error(err))
 			}
 
-			localMessageRouter.SendToPresenceIDsNewA(logger, b.PresenceIDs, b.Envelope, b.Reliable)
+			if os.Getenv("HOSTNAME") != b.SenderHost {
+				localMessageRouter.SendToPresenceIDsNewA(logger, b.PresenceIDs, b.Envelope, b.Reliable)
+			}
 
 		}
 	}(localMessageRouter)
