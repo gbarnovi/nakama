@@ -15,10 +15,14 @@
 package server
 
 import (
+	"context"
+	"encoding/json"
 	"github.com/heroiclabs/nakama-common/rtapi"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"os"
 )
 
 // Deferred message expected to be batched with other deferred messages.
@@ -34,29 +38,44 @@ type MessageRouter interface {
 	SendToPresenceIDs(*zap.Logger, []*PresenceID, *rtapi.Envelope, bool)
 	SendToStream(*zap.Logger, PresenceStream, *rtapi.Envelope, bool)
 	SendDeferred(*zap.Logger, []*DeferredMessage)
+	Share(logger *zap.Logger, data SSA) error
+	SendToPresenceIDsNew(*zap.Logger, []*PresenceID, *rtapi.Envelope, bool, bool)
+	SendToPresenceIDsNewA(*zap.Logger, []*PresenceID, *rtapi.Envelope, bool)
 }
 
 type LocalMessageRouter struct {
 	protojsonMarshaler *protojson.MarshalOptions
 	sessionRegistry    SessionRegistry
 	tracker            Tracker
+	redis              *redis.Client
 }
 
-func NewLocalMessageRouter(sessionRegistry SessionRegistry, tracker Tracker, protojsonMarshaler *protojson.MarshalOptions) MessageRouter {
-	return &LocalMessageRouter{
-		protojsonMarshaler: protojsonMarshaler,
-		sessionRegistry:    sessionRegistry,
-		tracker:            tracker,
+type SSA struct {
+	SenderHost  string          `json:"senderHost"`
+	Envelope    *rtapi.Envelope `json:"envelope"`
+	PresenceIDs []*PresenceID   `json:"presenceIDs"`
+	Reliable    bool            `json:"reliable"`
+}
+
+func (r *LocalMessageRouter) SendToPresenceIDsNewA(logger *zap.Logger, ids []*PresenceID, envelope *rtapi.Envelope, b bool) {
+	r.SendToPresenceIDsNew(logger, ids, envelope, b, false)
+}
+
+func (r *LocalMessageRouter) SendToPresenceIDsNew(logger *zap.Logger, presenceIDs []*PresenceID, envelope *rtapi.Envelope, reliable bool, gossip bool) {
+	if gossip {
+		if err := r.Share(logger, SSA{
+			SenderHost:  os.Getenv("HOSTNAME"),
+			Envelope:    envelope,
+			PresenceIDs: presenceIDs,
+			Reliable:    reliable,
+		}); err != nil {
+			logger.Error("error gossiping, %v", zap.Error(err))
+		}
 	}
-}
 
-func (r *LocalMessageRouter) SendToPresenceIDs(logger *zap.Logger, presenceIDs []*PresenceID, envelope *rtapi.Envelope, reliable bool) {
 	if len(presenceIDs) == 0 {
 		return
 	}
-
-	logger.Debug("No session to route to", zap.String("sid", "giorgi"))
-	logger.Info("Hello")
 
 	// Prepare payload variables but do not initialize until we hit a session that needs them to avoid unnecessary work.
 	var payloadProtobuf []byte
@@ -99,6 +118,49 @@ func (r *LocalMessageRouter) SendToPresenceIDs(logger *zap.Logger, presenceIDs [
 			logger.Error("Failed to route message", zap.String("sid", presenceID.SessionID.String()), zap.Error(err))
 		}
 	}
+}
+
+func (r *LocalMessageRouter) Share(logger *zap.Logger, data SSA) error {
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		logger.Error("error: ", zap.Error(err))
+		return err
+	}
+
+	return r.redis.Publish(context.Background(), "sharing", encoded).Err()
+}
+
+func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, tracker Tracker, protojsonMarshaler *protojson.MarshalOptions) MessageRouter {
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     "host.docker.internal:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+
+	go func() {
+		// There is no error because go-redis automatically reconnects on error.
+		pubsub := rdb.Subscribe(context.Background(), "sharing")
+
+		// Close the subscription when we are done.
+		defer pubsub.Close()
+
+		ch := pubsub.Channel()
+
+		for msg := range ch {
+			logger.Info("%s, %s", zap.String("channel", msg.Channel), zap.Any("payload", msg.Payload))
+		}
+	}()
+
+	return &LocalMessageRouter{
+		protojsonMarshaler: protojsonMarshaler,
+		sessionRegistry:    sessionRegistry,
+		tracker:            tracker,
+		redis:              rdb,
+	}
+}
+
+func (r *LocalMessageRouter) SendToPresenceIDs(logger *zap.Logger, presenceIDs []*PresenceID, envelope *rtapi.Envelope, reliable bool) {
+	r.SendToPresenceIDsNew(logger, presenceIDs, envelope, reliable, true)
 }
 
 func (r *LocalMessageRouter) SendToStream(logger *zap.Logger, stream PresenceStream, envelope *rtapi.Envelope, reliable bool) {
