@@ -17,6 +17,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/golang/protobuf/jsonpb"
 	"github.com/heroiclabs/nakama-common/rtapi"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -63,11 +64,13 @@ func (s *SSA) MarshalJSON() ([]byte, error) {
 
 	// Custom structure for marshalling SSA
 	type CustomSSA struct {
-		SenderHost  string          `json:"senderHost"`
-		Envelope    json.RawMessage `json:"envelope"`
-		PresenceIDs []*PresenceID   `json:"presenceIDs"`
-		Reliable    bool            `json:"reliable"`
+		SenderHost  string        `json:"senderHost"`
+		Envelope    string        `json:"envelope"`
+		PresenceIDs []*PresenceID `json:"presenceIDs"`
+		Reliable    bool          `json:"reliable"`
 	}
+
+	marshaller := jsonpb.Marshaler{}
 
 	// Create a custom SSA instance to marshal
 	customSSA := CustomSSA{
@@ -77,11 +80,8 @@ func (s *SSA) MarshalJSON() ([]byte, error) {
 	}
 
 	// Marshal Envelope to JSON
-	envelopeJSON, err := protojson.MarshalOptions{
-		UseEnumNumbers:  true,
-		EmitUnpopulated: false,
-		Indent:          "",
-		UseProtoNames:   true}.Marshal(s.Envelope)
+	envelopeJSON, err := marshaller.MarshalToString(s.Envelope)
+
 	if err != nil {
 		return nil, err
 	}
@@ -95,10 +95,10 @@ func (s *SSA) MarshalJSON() ([]byte, error) {
 func (s *SSA) UnmarshalJSON(data []byte) error {
 	// Custom structure for unmarshalling JSON into SSA
 	type CustomSSA struct {
-		SenderHost  string          `json:"senderHost"`
-		Envelope    json.RawMessage `json:"envelope"`
-		PresenceIDs []*PresenceID   `json:"presenceIDs"`
-		Reliable    bool            `json:"reliable"`
+		SenderHost  string        `json:"senderHost"`
+		Envelope    string        `json:"envelope"`
+		PresenceIDs []*PresenceID `json:"presenceIDs"`
+		Reliable    bool          `json:"reliable"`
 	}
 
 	// Unmarshal JSON into custom SSA structure
@@ -116,11 +116,7 @@ func (s *SSA) UnmarshalJSON(data []byte) error {
 	// Unmarshal Envelope JSON into Envelope object
 	envelope := &rtapi.Envelope{}
 
-	a := &protojson.UnmarshalOptions{
-		DiscardUnknown: false,
-	}
-
-	if err := a.Unmarshal(customSSA.Envelope, envelope); err != nil {
+	if err := jsonpb.UnmarshalString(customSSA.Envelope, envelope); err != nil {
 		return err
 	}
 
