@@ -58,7 +58,7 @@ type SSA struct {
 }
 
 // MarshalJSON custom marshaller
-func (t *SSA) MarshalJSON() ([]byte, error) {
+func (t SSA) MarshalJSON() ([]byte, error) {
 	encodedEnvelope, err := proto.Marshal(t.Envelope)
 	if err != nil {
 		return []byte{}, err
@@ -80,7 +80,7 @@ func (t *SSA) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON custom un-marshaller
-func (t *SSA) UnmarshalJSON(data []byte) error {
+func (t SSA) UnmarshalJSON(data []byte) error {
 	type SS struct {
 		SenderHost  string          `json:"senderHost"`
 		Envelope    json.RawMessage `json:"envelope"`
