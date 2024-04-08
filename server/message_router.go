@@ -57,54 +57,11 @@ type SSA struct {
 	Reliable    bool            `json:"reliable"`
 }
 
-// MarshalJSON custom marshaller
-func (t *SSA) MarshalJSON() ([]byte, error) {
-	encodedEnvelope, err := proto.Marshal(t.Envelope)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	type SS struct {
-		SenderHost  string        `json:"senderHost"`
-		Envelope    []byte        `json:"envelope"`
-		PresenceIDs []*PresenceID `json:"presenceIDs"`
-		Reliable    bool          `json:"reliable"`
-	}
-
-	return json.Marshal(SS{
-		SenderHost:  t.SenderHost,
-		Envelope:    encodedEnvelope,
-		PresenceIDs: t.PresenceIDs,
-		Reliable:    t.Reliable,
-	})
-}
-
-// UnmarshalJSON custom un-marshaller
-func (t *SSA) UnmarshalJSON(data []byte) error {
-	type SS struct {
-		SenderHost  string        `json:"senderHost"`
-		Envelope    []byte        `json:"envelope"`
-		PresenceIDs []*PresenceID `json:"presenceIDs"`
-		Reliable    bool          `json:"reliable"`
-	}
-
-	a := &SS{}
-	if err := json.Unmarshal(data, a); err != nil {
-		return err
-	}
-
-	aa := &rtapi.Envelope{}
-
-	if err := proto.Unmarshal(a.Envelope, aa); err != nil {
-		return err
-	}
-
-	t.Envelope = aa
-	t.Reliable = a.Reliable
-	t.PresenceIDs = a.PresenceIDs
-	t.SenderHost = a.SenderHost
-
-	return nil
+type SSAA struct {
+	SenderHost  string        `json:"senderHost"`
+	Envelope    []byte        `json:"envelope"`
+	PresenceIDs []*PresenceID `json:"presenceIDs"`
+	Reliable    bool          `json:"reliable"`
 }
 
 func (r *LocalMessageRouter) SendToPresenceIDsNewA(logger *zap.Logger, ids []*PresenceID, envelope *rtapi.Envelope, b bool) {
@@ -171,13 +128,24 @@ func (r *LocalMessageRouter) SendToPresenceIDsNew(logger *zap.Logger, presenceID
 }
 
 func (r *LocalMessageRouter) Share(logger *zap.Logger, data SSA) error {
-	encoded, err := json.Marshal(data)
+
+	encoded, err := proto.Marshal(data.Envelope)
+	if err != nil {
+		return err
+	}
+
+	encoded1, err := json.Marshal(SSAA{
+		SenderHost:  data.SenderHost,
+		Envelope:    encoded,
+		PresenceIDs: data.PresenceIDs,
+		Reliable:    data.Reliable,
+	})
 	if err != nil {
 		logger.Error("error: ", zap.Error(err))
 		return err
 	}
 
-	return r.redis.Publish(context.Background(), "sharing", encoded).Err()
+	return r.redis.Publish(context.Background(), "sharing", encoded1).Err()
 }
 
 func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, tracker Tracker, protojsonMarshaler *protojson.MarshalOptions) MessageRouter {
@@ -204,12 +172,16 @@ func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, 
 		ch := pubsub.Channel()
 
 		for msg := range ch {
-			b := &SSA{}
+			b := &SSAA{}
 			err := json.Unmarshal([]byte(msg.Payload), b)
 			if err != nil {
 				logger.Error("err: ", zap.Error(err))
 			}
 			logger.Info("got message", zap.Any("message", b))
+			a := &rtapi.Envelope{}
+			if err := proto.Unmarshal(b.Envelope, a); err != nil {
+				logger.Error("err1: ", zap.Error(err))
+			}
 			//localMessageRouter.SendToPresenceIDsNewA(logger, b.PresenceIDs, b.Envelope, b.Reliable)
 
 		}
