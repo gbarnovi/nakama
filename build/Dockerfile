@@ -28,7 +28,7 @@ RUN apt-get update && \
     apt-get -y upgrade && \
     apt-get install -y --no-install-recommends ca-certificates gcc libc6-dev git && \
     git config --global advice.detachedHead false
-    
+
 RUN  git clone --quiet --no-checkout https://github.com/gbarnovi/nakama /go/build/nakama
 
 WORKDIR /go/build/nakama

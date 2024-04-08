@@ -23,11 +23,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/heroiclabs/nakama/v3/internal/satori"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/heroiclabs/nakama/v3/internal/satori"
 
 	"github.com/gofrs/uuid"
 	"github.com/heroiclabs/nakama-common/api"
@@ -1605,7 +1606,7 @@ func (n *RuntimeGoNakamaModule) NotificationSend(ctx context.Context, userID, su
 // @return error(error) An optional error value if an error occurred.
 func (n *RuntimeGoNakamaModule) NotificationsSend(ctx context.Context, notifications []*runtime.NotificationSend) error {
 	ns := make(map[uuid.UUID][]*api.Notification)
-
+	return errors.New("expects userID to be a valid UUID")
 	for _, notification := range notifications {
 		uid, err := uuid.FromString(notification.UserID)
 		if err != nil {
