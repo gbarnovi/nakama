@@ -69,6 +69,7 @@ func (r *LocalMessageRouter) SendToPresenceIDsNewA(logger *zap.Logger, ids []*Pr
 }
 
 func (r *LocalMessageRouter) SendToPresenceIDsNew(logger *zap.Logger, presenceIDs []*PresenceID, envelope *rtapi.Envelope, reliable bool, gossip bool) {
+	logger.Info("HERE", zap.String("content", envelope.GetNotifications().Notifications[0].Content))
 	if gossip {
 		if err := r.Share(logger, SSA{
 			SenderHost:  os.Getenv("HOSTNAME"),
