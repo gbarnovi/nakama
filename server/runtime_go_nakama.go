@@ -1667,7 +1667,6 @@ func (n *RuntimeGoNakamaModule) NotificationSendAll(ctx context.Context, subject
 	if subject == "" {
 		return errors.New("expects subject to be a non-empty string")
 	}
-	return errors.New("expects subject to be a non-empty string")
 
 	contentBytes, err := json.Marshal(content)
 	if err != nil {
