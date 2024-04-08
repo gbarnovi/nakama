@@ -1702,7 +1702,12 @@ func (n *RuntimeGoNakamaModule) NotificationSendAll(ctx context.Context, subject
 		CreateTime: createTime,
 	}
 
-	a := n.redis.Publish(ctx, "sharing", not)
+	encoded, err := n.protojsonMarshaler.Marshal(not)
+	if err != nil {
+		return err
+	}
+
+	a := n.redis.Publish(ctx, "sharing", encoded)
 	if a.Err() != nil {
 		return a.Err()
 	}
