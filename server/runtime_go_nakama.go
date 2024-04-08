@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/redis/go-redis/v9"
 	"os"
 	"strings"
 	"sync"
@@ -65,9 +66,17 @@ type RuntimeGoNakamaModule struct {
 	node                 string
 	matchCreateFn        RuntimeMatchCreateFunction
 	satori               runtime.Satori
+	redis                *redis.Client
 }
 
 func NewRuntimeGoNakamaModule(logger *zap.Logger, db *sql.DB, protojsonMarshaler *protojson.MarshalOptions, config Config, socialClient *social.Client, leaderboardCache LeaderboardCache, leaderboardRankCache LeaderboardRankCache, leaderboardScheduler LeaderboardScheduler, sessionRegistry SessionRegistry, sessionCache SessionCache, statusRegistry *StatusRegistry, matchRegistry MatchRegistry, tracker Tracker, metrics Metrics, streamManager StreamManager, router MessageRouter) *RuntimeGoNakamaModule {
+
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     "host.docker.internal:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+
 	return &RuntimeGoNakamaModule{
 		logger:               logger,
 		db:                   db,
@@ -89,6 +98,8 @@ func NewRuntimeGoNakamaModule(logger *zap.Logger, db *sql.DB, protojsonMarshaler
 		node: config.GetName(),
 
 		satori: satori.NewSatoriClient(logger, config.GetSatori().Url, config.GetSatori().ApiKeyName, config.GetSatori().ApiKey, config.GetSatori().SigningKey),
+
+		redis: rdb,
 	}
 }
 
@@ -1689,6 +1700,11 @@ func (n *RuntimeGoNakamaModule) NotificationSendAll(ctx context.Context, subject
 		SenderId:   senderID,
 		Persistent: persistent,
 		CreateTime: createTime,
+	}
+
+	a := n.redis.Publish(ctx, "sharing", not)
+	if a.Err() != nil {
+		return a.Err()
 	}
 
 	return NotificationSendAll(ctx, n.logger, n.db, n.tracker, n.router, not)
