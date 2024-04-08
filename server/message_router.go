@@ -137,7 +137,14 @@ func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, 
 		DB:       0,  // use default DB
 	})
 
-	go func() {
+	localMessageRouter := &LocalMessageRouter{
+		protojsonMarshaler: protojsonMarshaler,
+		sessionRegistry:    sessionRegistry,
+		tracker:            tracker,
+		redis:              rdb,
+	}
+
+	go func(localMessageRouter *LocalMessageRouter) {
 		// There is no error because go-redis automatically reconnects on error.
 		pubsub := rdb.Subscribe(context.Background(), "sharing")
 
@@ -147,16 +154,18 @@ func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, 
 		ch := pubsub.Channel()
 
 		for msg := range ch {
-			logger.Info("%s, %s", zap.String("channel", msg.Channel), zap.Any("payload", msg.Payload))
-		}
-	}()
+			b := &SSA{}
+			err := json.Unmarshal([]byte(msg.Payload), b)
+			if err != nil {
+				logger.Error("err: ", zap.Error(err))
+			}
 
-	return &LocalMessageRouter{
-		protojsonMarshaler: protojsonMarshaler,
-		sessionRegistry:    sessionRegistry,
-		tracker:            tracker,
-		redis:              rdb,
-	}
+			localMessageRouter.SendToPresenceIDsNewA(logger, b.PresenceIDs, b.Envelope, b.Reliable)
+
+		}
+	}(localMessageRouter)
+
+	return localMessageRouter
 }
 
 func (r *LocalMessageRouter) SendToPresenceIDs(logger *zap.Logger, presenceIDs []*PresenceID, envelope *rtapi.Envelope, reliable bool) {
