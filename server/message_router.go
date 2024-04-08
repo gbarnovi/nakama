@@ -58,7 +58,7 @@ type SSA struct {
 }
 
 // MarshalJSON custom marshaller
-func (t SSA) MarshalJSON() ([]byte, error) {
+func (t *SSA) MarshalJSON() ([]byte, error) {
 	encodedEnvelope, err := proto.Marshal(t.Envelope)
 	if err != nil {
 		return []byte{}, err
@@ -80,7 +80,7 @@ func (t SSA) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON custom un-marshaller
-func (t SSA) UnmarshalJSON(data []byte) error {
+func (t *SSA) UnmarshalJSON(data []byte) error {
 	type SS struct {
 		SenderHost  string          `json:"senderHost"`
 		Envelope    json.RawMessage `json:"envelope"`
@@ -204,12 +204,12 @@ func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, 
 		ch := pubsub.Channel()
 
 		for msg := range ch {
-			b := &rtapi.Envelope{}
-			err := proto.Unmarshal([]byte(msg.Payload), b)
+			b := &SSA{}
+			err := json.Unmarshal([]byte(msg.Payload), b)
 			if err != nil {
 				logger.Error("err: ", zap.Error(err))
 			}
-			logger.Info("got mesaage", zap.Any("message", b))
+			logger.Info("got message", zap.Any("message", b))
 			//localMessageRouter.SendToPresenceIDsNewA(logger, b.PresenceIDs, b.Envelope, b.Reliable)
 
 		}
