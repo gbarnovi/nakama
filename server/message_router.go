@@ -65,10 +65,10 @@ func (t *SSA) MarshalJSON() ([]byte, error) {
 	}
 
 	type SS struct {
-		SenderHost  string        `json:"senderHost"`
-		Envelope    []byte        `json:"envelope"`
-		PresenceIDs []*PresenceID `json:"presenceIDs"`
-		Reliable    bool          `json:"reliable"`
+		SenderHost  string          `json:"senderHost"`
+		Envelope    json.RawMessage `json:"envelope"`
+		PresenceIDs []*PresenceID   `json:"presenceIDs"`
+		Reliable    bool            `json:"reliable"`
 	}
 
 	return json.Marshal(SS{
@@ -82,10 +82,10 @@ func (t *SSA) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON custom un-marshaller
 func (t *SSA) UnmarshalJSON(data []byte) error {
 	type SS struct {
-		SenderHost  string        `json:"senderHost"`
-		Envelope    []byte        `json:"envelope"`
-		PresenceIDs []*PresenceID `json:"presenceIDs"`
-		Reliable    bool          `json:"reliable"`
+		SenderHost  string          `json:"senderHost"`
+		Envelope    json.RawMessage `json:"envelope"`
+		PresenceIDs []*PresenceID   `json:"presenceIDs"`
+		Reliable    bool            `json:"reliable"`
 	}
 
 	a := &SS{}
