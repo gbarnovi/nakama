@@ -89,7 +89,7 @@ func (t *SSA) UnmarshalJSON(data []byte) error {
 	}
 
 	a := &SS{}
-	if err := json.Unmarshal(data, &SS{}); err != nil {
+	if err := json.Unmarshal(data, a); err != nil {
 		return err
 	}
 
