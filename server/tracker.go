@@ -270,8 +270,8 @@ func (t *LocalTracker) Stop() {
 	t.ctxCancelFn()
 }
 
-func (t *LocalTracker) getRedisKey(mode uint8, userID uuid.UUID) string {
-	return fmt.Sprintf("%v_%v_%v", os.Getenv("HOSTNAME"), mode, userID)
+func (t *LocalTracker) getRedisKey(stream PresenceStream, userID uuid.UUID) string {
+	return fmt.Sprintf("%v_%v_%v_%v_%v_%v", os.Getenv("HOSTNAME"), userID, stream.Mode, stream.Subject, stream.Subcontext, stream.Label)
 }
 
 func (t *LocalTracker) Track(ctx context.Context, sessionID uuid.UUID, stream PresenceStream, userID uuid.UUID, meta PresenceMeta, allowIfFirstForSession bool) (bool, bool) {
@@ -286,7 +286,7 @@ func (t *LocalTracker) Track(ctx context.Context, sessionID uuid.UUID, stream Pr
 		zap.Bool("allowfirst", allowIfFirstForSession))
 	t.Lock()
 
-	redisKey := t.getRedisKey(pc.Stream.Mode, pc.UserID)
+	redisKey := t.getRedisKey(stream, userID)
 
 	t.logger.Info("redis_key", zap.String("redis_key", redisKey))
 
@@ -359,7 +359,7 @@ func (t *LocalTracker) TrackMulti(ctx context.Context, sessionID uuid.UUID, ops 
 		syncAtomic.StoreUint32(&op.Meta.Reason, uint32(runtime.PresenceReasonJoin))
 		pc := presenceCompact{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: op.Stream, UserID: userID}
 		p := &Presence{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: op.Stream, UserID: userID, Meta: op.Meta}
-		redisKey := t.getRedisKey(pc.Stream.Mode, pc.UserID)
+		redisKey := t.getRedisKey(pc.Stream, pc.UserID)
 		t.logger.Info("redis_key", zap.String("redis_key", redisKey))
 
 		// See if this session has any presences tracked at all.
@@ -908,17 +908,31 @@ func (t *LocalTracker) ListLocalSessionIDByStream(stream PresenceStream) []uuid.
 
 func (t *LocalTracker) ListPresenceIDByStream(stream PresenceStream) []*PresenceID {
 	t.RLock()
-	byStream, anyTracked := t.presencesByStream[stream.Mode][stream]
-	if !anyTracked {
-		t.RUnlock()
-		return []*PresenceID{}
+	defer t.RUnlock()
+
+	t.logger.Info("stream in listprecense", zap.Any("stream", stream))
+	var ps []*PresenceID
+
+	redisPatters := fmt.Sprintf("%v_%v_%v_%v_%v_%v", "*", "*", stream.Mode, stream.Subject, stream.Subcontext, stream.Label)
+
+	keys, _, err := t.redis.Scan(context.Background(), 0, redisPatters, 10000).Result()
+	if err != nil {
+		panic(err)
 	}
-	ps := make([]*PresenceID, 0, len(byStream))
-	for pc := range byStream {
-		pid := pc.ID
-		ps = append(ps, &pid)
+
+	t.logger.Info("ListPresenceIDByStream", zap.Strings("results", keys))
+
+	ps = make([]*PresenceID, 0, len(keys))
+
+	for _, key := range keys {
+		value, err := t.redis.Get(context.Background(), key).Result()
+		if err != nil {
+			panic(err)
+		}
+
+		ps = append(ps, &PresenceID{SessionID: uuid.FromStringOrNil(value)})
 	}
-	t.RUnlock()
+
 	return ps
 }
 
