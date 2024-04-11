@@ -242,7 +242,7 @@ func StartLocalTracker(logger *zap.Logger, config Config, sessionRegistry Sessio
 		a := time.NewTicker(5 * time.Second)
 		for {
 			<-a.C
-			aa.logger.Info("ticker", zap.Any("presencesBySession", aa.presencesBySession), zap.Any("presencesByStream", aa.presencesByStream))
+			aa.logger.Info("ticker", zap.String("presencesBySession", fmt.Sprintf("%+v", aa.presencesBySession)), zap.String("presencesByStream", fmt.Sprintf("%+v", aa.presencesByStream)))
 		}
 	}(t)
 
