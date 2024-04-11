@@ -17,6 +17,8 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/redis/go-redis/v9"
+	"os"
 	"sync"
 	syncAtomic "sync/atomic"
 	"time"
@@ -195,9 +197,11 @@ type LocalTracker struct {
 
 	ctx         context.Context
 	ctxCancelFn context.CancelFunc
+
+	redis *redis.Client
 }
 
-func StartLocalTracker(logger *zap.Logger, config Config, sessionRegistry SessionRegistry, statusRegistry *StatusRegistry, metrics Metrics, protojsonMarshaler *protojson.MarshalOptions) Tracker {
+func StartLocalTracker(logger *zap.Logger, config Config, sessionRegistry SessionRegistry, statusRegistry *StatusRegistry, metrics Metrics, protojsonMarshaler *protojson.MarshalOptions, client *redis.Client) Tracker {
 	ctx, ctxCancelFn := context.WithCancel(context.Background())
 
 	t := &LocalTracker{
@@ -214,6 +218,8 @@ func StartLocalTracker(logger *zap.Logger, config Config, sessionRegistry Sessio
 
 		ctx:         ctx,
 		ctxCancelFn: ctxCancelFn,
+
+		redis: client,
 	}
 
 	go func() {
@@ -328,6 +334,7 @@ func (t *LocalTracker) TrackMulti(ctx context.Context, sessionID uuid.UUID, ops 
 		syncAtomic.StoreUint32(&op.Meta.Reason, uint32(runtime.PresenceReasonJoin))
 		pc := presenceCompact{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: op.Stream, UserID: userID}
 		p := &Presence{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: op.Stream, UserID: userID, Meta: op.Meta}
+		redisKey := fmt.Sprintf("%v_%v_%v", os.Getenv("HOSTNAME"), op.Stream.Mode, pc.UserID)
 
 		// See if this session has any presences tracked at all.
 		if bySession, anyTracked := t.presencesBySession[sessionID]; anyTracked {
@@ -356,6 +363,7 @@ func (t *LocalTracker) TrackMulti(ctx context.Context, sessionID uuid.UUID, ops 
 		if !ok {
 			byStreamMode = make(map[PresenceStream]map[presenceCompact]*Presence)
 			t.presencesByStream[op.Stream.Mode] = byStreamMode
+			t.redis.Set(ctx, redisKey, true, 0)
 		}
 
 		if byStream, ok := byStreamMode[op.Stream]; !ok {
@@ -439,6 +447,8 @@ func (t *LocalTracker) UntrackMulti(sessionID uuid.UUID, streams []*PresenceStre
 
 	for _, stream := range streams {
 		pc := presenceCompact{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: *stream, UserID: userID}
+		redisKey := fmt.Sprintf("%v_%v_%v", os.Getenv("HOSTNAME"), pc.Stream.Mode, pc.UserID)
+		t.redis.Del(context.Background(), redisKey)
 
 		bySession, anyTracked := t.presencesBySession[sessionID]
 		if !anyTracked {
@@ -472,6 +482,7 @@ func (t *LocalTracker) UntrackMulti(sessionID uuid.UUID, streams []*PresenceStre
 				// There were other presences for the stream, drop just this one.
 				delete(byStream, pc)
 			}
+
 		} else {
 			// There are other streams for this stream mode.
 			if byStream := byStreamMode[*stream]; len(byStream) == 1 {
@@ -865,6 +876,7 @@ func (t *LocalTracker) ListLocalSessionIDByStream(stream PresenceStream) []uuid.
 
 func (t *LocalTracker) ListPresenceIDByStream(stream PresenceStream) []*PresenceID {
 	t.RLock()
+	t.redis.Scan(context.Background(), 0, fmt.Sprintf("*_%v_%v", stream.Mode, stream.Subject), 100000).Result()
 	byStream, anyTracked := t.presencesByStream[stream.Mode][stream]
 	if !anyTracked {
 		t.RUnlock()

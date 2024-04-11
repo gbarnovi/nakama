@@ -149,12 +149,7 @@ func (r *LocalMessageRouter) Share(logger *zap.Logger, data SSA) error {
 	return r.redis.Publish(context.Background(), "sharing", encoded1).Err()
 }
 
-func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, tracker Tracker, protojsonMarshaler *protojson.MarshalOptions) MessageRouter {
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     "host.docker.internal:6379",
-		Password: "", // no password set
-		DB:       0,  // use default DB
-	})
+func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, tracker Tracker, protojsonMarshaler *protojson.MarshalOptions, rdb *redis.Client) MessageRouter {
 
 	localMessageRouter := &LocalMessageRouter{
 		protojsonMarshaler: protojsonMarshaler,

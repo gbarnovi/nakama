@@ -20,6 +20,7 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"github.com/redis/go-redis/v9"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -135,6 +136,12 @@ func main() {
 	// Access to social provider integrations.
 	socialClient := social.NewClient(logger, 5*time.Second, config.GetGoogleAuth().OAuthConfig)
 
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     "host.docker.internal:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+
 	// Start up server components.
 	cookie := newOrLoadCookie(config)
 	metrics := server.NewLocalMetrics(logger, startupLogger, db, config)
@@ -143,8 +150,8 @@ func main() {
 	consoleSessionCache := server.NewLocalSessionCache(config.GetConsole().TokenExpirySec)
 	loginAttemptCache := server.NewLocalLoginAttemptCache()
 	statusRegistry := server.NewStatusRegistry(logger, config, sessionRegistry, jsonpbMarshaler)
-	tracker := server.StartLocalTracker(logger, config, sessionRegistry, statusRegistry, metrics, jsonpbMarshaler)
-	router := server.NewLocalMessageRouter(logger, sessionRegistry, tracker, jsonpbMarshaler)
+	tracker := server.StartLocalTracker(logger, config, sessionRegistry, statusRegistry, metrics, jsonpbMarshaler, rdb)
+	router := server.NewLocalMessageRouter(logger, sessionRegistry, tracker, jsonpbMarshaler, rdb)
 	leaderboardCache := server.NewLocalLeaderboardCache(logger, startupLogger, db)
 	leaderboardRankCache := server.NewLocalLeaderboardRankCache(ctx, startupLogger, db, config.GetLeaderboard(), leaderboardCache)
 	leaderboardScheduler := server.NewLocalLeaderboardScheduler(logger, db, config, leaderboardCache, leaderboardRankCache)
