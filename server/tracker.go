@@ -267,6 +267,12 @@ func (t *LocalTracker) Track(ctx context.Context, sessionID uuid.UUID, stream Pr
 	p := &Presence{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: stream, UserID: userID, Meta: meta}
 	t.Lock()
 
+	redisKey := fmt.Sprintf("%v_%v_%v", os.Getenv("HOSTNAME"), pc.Stream.Mode, pc.UserID)
+
+	t.logger.Info("redis_key", zap.String("redis_key", redisKey))
+
+	t.redis.Set(ctx, redisKey, true, 0)
+
 	select {
 	case <-ctx.Done():
 		t.Unlock()
@@ -335,6 +341,7 @@ func (t *LocalTracker) TrackMulti(ctx context.Context, sessionID uuid.UUID, ops 
 		pc := presenceCompact{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: op.Stream, UserID: userID}
 		p := &Presence{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: op.Stream, UserID: userID, Meta: op.Meta}
 		redisKey := fmt.Sprintf("%v_%v_%v", os.Getenv("HOSTNAME"), op.Stream.Mode, pc.UserID)
+		t.logger.Info("redis_key", zap.String("redis_key", redisKey))
 
 		// See if this session has any presences tracked at all.
 		if bySession, anyTracked := t.presencesBySession[sessionID]; anyTracked {
@@ -389,6 +396,12 @@ func (t *LocalTracker) TrackMulti(ctx context.Context, sessionID uuid.UUID, ops 
 func (t *LocalTracker) Untrack(sessionID uuid.UUID, stream PresenceStream, userID uuid.UUID) {
 	pc := presenceCompact{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: stream, UserID: userID}
 	t.Lock()
+
+	redisKey := fmt.Sprintf("%v_%v_%v", os.Getenv("HOSTNAME"), pc.Stream.Mode, pc.UserID)
+
+	t.logger.Info("redis_key", zap.String("redis_key", redisKey))
+
+	t.redis.Del(context.Background(), redisKey)
 
 	bySession, anyTracked := t.presencesBySession[sessionID]
 	if !anyTracked {
