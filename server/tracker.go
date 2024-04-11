@@ -238,6 +238,14 @@ func StartLocalTracker(logger *zap.Logger, config Config, sessionRegistry Sessio
 		}
 	}()
 
+	go func(aa *LocalTracker) {
+		a := time.NewTicker(5 * time.Second)
+		for {
+			<-a.C
+			aa.logger.Info("ticker", zap.Any("presencesBySession", aa.presencesBySession), zap.Any("presencesByStream", aa.presencesByStream))
+		}
+	}(t)
+
 	return t
 }
 
@@ -900,29 +908,17 @@ func (t *LocalTracker) ListLocalSessionIDByStream(stream PresenceStream) []uuid.
 
 func (t *LocalTracker) ListPresenceIDByStream(stream PresenceStream) []*PresenceID {
 	t.RLock()
-	defer t.RUnlock()
-
-	t.logger.Info("stream in listprecense", zap.Any("stream", stream))
-	var ps []*PresenceID
-
-	keys, _, err := t.redis.Scan(context.Background(), 0, fmt.Sprintf("*_%v_%v", stream.Mode, stream.Subject), 10000).Result()
-	if err != nil {
-		panic(err)
+	byStream, anyTracked := t.presencesByStream[stream.Mode][stream]
+	if !anyTracked {
+		t.RUnlock()
+		return []*PresenceID{}
 	}
-
-	t.logger.Info("ListPresenceIDByStream", zap.Strings("results", keys))
-
-	ps = make([]*PresenceID, 0, len(keys))
-
-	for _, key := range keys {
-		value, err := t.redis.Get(context.Background(), key).Result()
-		if err != nil {
-			panic(err)
-		}
-
-		ps = append(ps, &PresenceID{SessionID: uuid.FromStringOrNil(value)})
+	ps := make([]*PresenceID, 0, len(byStream))
+	for pc := range byStream {
+		pid := pc.ID
+		ps = append(ps, &pid)
 	}
-
+	t.RUnlock()
 	return ps
 }
 
