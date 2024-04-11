@@ -896,28 +896,25 @@ func (t *LocalTracker) ListPresenceIDByStream(stream PresenceStream) []*Presence
 	t.RLock()
 	defer t.RUnlock()
 
-	r := t.redis.Keys(context.Background(), fmt.Sprintf("*_%v_%v", stream.Mode, stream.Subject)).Val()
-
 	t.logger.Info("stream in listprecense", zap.Any("stream", stream))
-	t.logger.Info("ListPresenceIDByStream", zap.Strings("results", r))
 	var ps []*PresenceID
 
-	for {
-		keys, _, err := t.redis.Scan(context.Background(), 0, fmt.Sprintf("*_%v_%v", stream.Mode, stream.Subject), 10000).Result()
+	keys, _, err := t.redis.Scan(context.Background(), 0, fmt.Sprintf("*_%v_%v", stream.Mode, stream.Subject), 10000).Result()
+	if err != nil {
+		panic(err)
+	}
+
+	t.logger.Info("ListPresenceIDByStream", zap.Strings("results", keys))
+
+	ps = make([]*PresenceID, 0, len(keys))
+
+	for _, key := range keys {
+		value, err := t.redis.Get(context.Background(), key).Result()
 		if err != nil {
 			panic(err)
 		}
 
-		ps = make([]*PresenceID, 0, len(keys))
-
-		for _, key := range keys {
-			value, err := t.redis.Get(context.Background(), key).Result()
-			if err != nil {
-				panic(err)
-			}
-
-			ps = append(ps, &PresenceID{SessionID: uuid.FromStringOrNil(value)})
-		}
+		ps = append(ps, &PresenceID{SessionID: uuid.FromStringOrNil(value)})
 	}
 
 	return ps
