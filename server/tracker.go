@@ -267,7 +267,7 @@ func (t *LocalTracker) Track(ctx context.Context, sessionID uuid.UUID, stream Pr
 	p := &Presence{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: stream, UserID: userID, Meta: meta}
 	t.Lock()
 
-	redisKey := fmt.Sprintf("%v_%v_%v", os.Getenv("HOSTNAME"), pc.Stream.Mode, pc.UserID)
+	redisKey := fmt.Sprintf("%v_%v_%v_%v", os.Getenv("HOSTNAME"), pc.Stream.Mode, pc.UserID, sessionID)
 
 	t.logger.Info("redis_key", zap.String("redis_key", redisKey))
 
@@ -340,7 +340,7 @@ func (t *LocalTracker) TrackMulti(ctx context.Context, sessionID uuid.UUID, ops 
 		syncAtomic.StoreUint32(&op.Meta.Reason, uint32(runtime.PresenceReasonJoin))
 		pc := presenceCompact{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: op.Stream, UserID: userID}
 		p := &Presence{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: op.Stream, UserID: userID, Meta: op.Meta}
-		redisKey := fmt.Sprintf("%v_%v_%v", os.Getenv("HOSTNAME"), op.Stream.Mode, pc.UserID)
+		redisKey := fmt.Sprintf("%v_%v_%v_%v", os.Getenv("HOSTNAME"), pc.Stream.Mode, pc.UserID, sessionID)
 		t.logger.Info("redis_key", zap.String("redis_key", redisKey))
 
 		// See if this session has any presences tracked at all.
@@ -889,7 +889,10 @@ func (t *LocalTracker) ListLocalSessionIDByStream(stream PresenceStream) []uuid.
 
 func (t *LocalTracker) ListPresenceIDByStream(stream PresenceStream) []*PresenceID {
 	t.RLock()
-	t.redis.Scan(context.Background(), 0, fmt.Sprintf("*_%v_%v", stream.Mode, stream.Subject), 100000).Result()
+	r := t.redis.Keys(context.Background(), fmt.Sprintf("*_%v_%v", stream.Mode, stream.Subject)).Val()
+
+	t.logger.Info("stream in listprecense", zap.Any("stream", stream))
+	t.logger.Info("ListPresenceIDByStream", zap.Strings("results", r))
 	byStream, anyTracked := t.presencesByStream[stream.Mode][stream]
 	if !anyTracked {
 		t.RUnlock()
