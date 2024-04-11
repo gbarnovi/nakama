@@ -270,6 +270,12 @@ func (t *LocalTracker) Track(ctx context.Context, sessionID uuid.UUID, stream Pr
 	syncAtomic.StoreUint32(&meta.Reason, uint32(runtime.PresenceReasonJoin))
 	pc := presenceCompact{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: stream, UserID: userID}
 	p := &Presence{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: stream, UserID: userID, Meta: meta}
+	t.logger.Info("Track",
+		zap.Any("sessionID", sessionID),
+		zap.Any("stream", stream),
+		zap.Any("userid", userID.String()),
+		zap.Any("meta", meta),
+		zap.Bool("allowfirst", allowIfFirstForSession))
 	t.Lock()
 
 	redisKey := t.getRedisKey(pc.Stream.Mode, pc.UserID)
