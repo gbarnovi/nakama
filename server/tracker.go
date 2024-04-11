@@ -276,7 +276,7 @@ func (t *LocalTracker) Track(ctx context.Context, sessionID uuid.UUID, stream Pr
 
 	t.logger.Info("redis_key", zap.String("redis_key", redisKey))
 
-	t.redis.Set(ctx, redisKey, pc.ID.SessionID, 0)
+	t.redis.Set(ctx, redisKey, pc.ID.SessionID.String(), 0)
 
 	select {
 	case <-ctx.Done():
@@ -375,7 +375,7 @@ func (t *LocalTracker) TrackMulti(ctx context.Context, sessionID uuid.UUID, ops 
 		if !ok {
 			byStreamMode = make(map[PresenceStream]map[presenceCompact]*Presence)
 			t.presencesByStream[op.Stream.Mode] = byStreamMode
-			t.redis.Set(ctx, redisKey, pc.ID.SessionID, 0)
+			t.redis.Set(ctx, redisKey, pc.ID.SessionID.String(), 0)
 		}
 
 		if byStream, ok := byStreamMode[op.Stream]; !ok {
