@@ -894,6 +894,8 @@ func (t *LocalTracker) ListLocalSessionIDByStream(stream PresenceStream) []uuid.
 
 func (t *LocalTracker) ListPresenceIDByStream(stream PresenceStream) []*PresenceID {
 	t.RLock()
+	defer t.RUnlock()
+
 	r := t.redis.Keys(context.Background(), fmt.Sprintf("*_%v_%v", stream.Mode, stream.Subject)).Val()
 
 	t.logger.Info("stream in listprecense", zap.Any("stream", stream))
@@ -918,7 +920,6 @@ func (t *LocalTracker) ListPresenceIDByStream(stream PresenceStream) []*Presence
 		}
 	}
 
-	t.RUnlock()
 	return ps
 }
 
