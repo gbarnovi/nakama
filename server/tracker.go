@@ -270,8 +270,8 @@ func (t *LocalTracker) Stop() {
 	t.ctxCancelFn()
 }
 
-func (t *LocalTracker) getRedisKey(stream PresenceStream, userID uuid.UUID) string {
-	return fmt.Sprintf("%v_%v_%v_%v_%v_%v", os.Getenv("HOSTNAME"), userID, stream.Mode, stream.Subject, stream.Subcontext, stream.Label)
+func (t *LocalTracker) getRedisKey(stream PresenceStream, sessionID, userID uuid.UUID) string {
+	return fmt.Sprintf("%v_%v_%v_%v_%v_%v_%v", os.Getenv("HOSTNAME"), sessionID, userID, stream.Mode, stream.Subject, stream.Subcontext, stream.Label)
 }
 
 func (t *LocalTracker) Track(ctx context.Context, sessionID uuid.UUID, stream PresenceStream, userID uuid.UUID, meta PresenceMeta, allowIfFirstForSession bool) (bool, bool) {
@@ -286,7 +286,7 @@ func (t *LocalTracker) Track(ctx context.Context, sessionID uuid.UUID, stream Pr
 		zap.Bool("allowfirst", allowIfFirstForSession))
 	t.Lock()
 
-	redisKey := t.getRedisKey(stream, userID)
+	redisKey := t.getRedisKey(stream, sessionID, userID)
 
 	t.logger.Info("redis_key", zap.String("redis_key", redisKey))
 
@@ -359,7 +359,7 @@ func (t *LocalTracker) TrackMulti(ctx context.Context, sessionID uuid.UUID, ops 
 		syncAtomic.StoreUint32(&op.Meta.Reason, uint32(runtime.PresenceReasonJoin))
 		pc := presenceCompact{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: op.Stream, UserID: userID}
 		p := &Presence{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: op.Stream, UserID: userID, Meta: op.Meta}
-		redisKey := t.getRedisKey(pc.Stream, pc.UserID)
+		redisKey := t.getRedisKey(pc.Stream, sessionID, userID)
 		t.logger.Info("redis_key", zap.String("redis_key", redisKey))
 
 		// See if this session has any presences tracked at all.
@@ -540,6 +540,15 @@ func (t *LocalTracker) UntrackMulti(sessionID uuid.UUID, streams []*PresenceStre
 
 func (t *LocalTracker) UntrackAll(sessionID uuid.UUID, reason runtime.PresenceReason) {
 	t.Lock()
+
+	keys, _, err := t.redis.Scan(context.Background(), 0, fmt.Sprintf("%v_%v_%v", os.Getenv("HOSTNAME"), sessionID, "*"), 10000).Result()
+	if err != nil {
+		panic(err)
+	}
+
+	for _, key := range keys {
+		t.redis.Del(context.Background(), key)
+	}
 
 	bySession, anyTracked := t.presencesBySession[sessionID]
 	if !anyTracked {
