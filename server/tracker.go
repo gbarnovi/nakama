@@ -278,17 +278,17 @@ func (t *LocalTracker) Track(ctx context.Context, sessionID uuid.UUID, stream Pr
 	syncAtomic.StoreUint32(&meta.Reason, uint32(runtime.PresenceReasonJoin))
 	pc := presenceCompact{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: stream, UserID: userID}
 	p := &Presence{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: stream, UserID: userID, Meta: meta}
-	t.logger.Info("Track",
-		zap.Any("sessionID", sessionID),
-		zap.Any("stream", stream),
-		zap.Any("userid", userID.String()),
-		zap.Any("meta", meta),
-		zap.Bool("allowfirst", allowIfFirstForSession))
+	//t.logger.Info("Track",
+	//	zap.Any("sessionID", sessionID),
+	//	zap.Any("stream", stream),
+	//	zap.Any("userid", userID.String()),
+	//	zap.Any("meta", meta),
+	//	zap.Bool("allowfirst", allowIfFirstForSession))
 	t.Lock()
 
 	redisKey := t.getRedisKey(stream, sessionID, userID)
 
-	t.logger.Info("redis_key", zap.String("redis_key", redisKey))
+	//t.logger.Info("redis_key", zap.String("redis_key", redisKey))
 
 	t.redis.Set(ctx, redisKey, pc.ID.SessionID.String(), 0)
 
@@ -929,7 +929,7 @@ func (t *LocalTracker) ListPresenceIDByStream(stream PresenceStream) []*Presence
 		panic(err)
 	}
 
-	t.logger.Info("ListPresenceIDByStream", zap.Strings("results", keys))
+	//t.logger.Info("ListPresenceIDByStream", zap.Strings("results", keys))
 
 	ps = make([]*PresenceID, 0, len(keys))
 
