@@ -136,11 +136,22 @@ func main() {
 	// Access to social provider integrations.
 	socialClient := social.NewClient(logger, 5*time.Second, config.GetGoogleAuth().OAuthConfig)
 
+	redisAddress := os.Getenv("REDIS_ADDR")
+	if redisAddress == "" {
+		redisAddress = "host.docker.internal:6379"
+	}
+
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     "host.docker.internal:6379",
+		Addr:     redisAddress,
 		Password: "", // no password set
 		DB:       0,  // use default DB
 	})
+
+	err := rdb.Ping(ctx).Err()
+	if err != nil {
+		logger.Error("can't connect to redis, %v", zap.Error(err), zap.String("redisAddress", redisAddress))
+		return
+	}
 
 	// Start up server components.
 	cookie := newOrLoadCookie(config)
