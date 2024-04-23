@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/redis/go-redis/v9"
-	"os"
 	"sync"
 	syncAtomic "sync/atomic"
 	"time"
@@ -199,10 +198,11 @@ type LocalTracker struct {
 	ctx         context.Context
 	ctxCancelFn context.CancelFunc
 
-	redis *redis.Client
+	redis      *redis.Client
+	instanceID string
 }
 
-func StartLocalTracker(logger *zap.Logger, config Config, sessionRegistry SessionRegistry, statusRegistry *StatusRegistry, metrics Metrics, protojsonMarshaler *protojson.MarshalOptions, client *redis.Client) Tracker {
+func StartLocalTracker(logger *zap.Logger, config Config, sessionRegistry SessionRegistry, statusRegistry *StatusRegistry, metrics Metrics, protojsonMarshaler *protojson.MarshalOptions, client *redis.Client, instanceID string) Tracker {
 	ctx, ctxCancelFn := context.WithCancel(context.Background())
 
 	t := &LocalTracker{
@@ -220,7 +220,8 @@ func StartLocalTracker(logger *zap.Logger, config Config, sessionRegistry Sessio
 		ctx:         ctx,
 		ctxCancelFn: ctxCancelFn,
 
-		redis: client,
+		redis:      client,
+		instanceID: instanceID,
 	}
 
 	go func() {
@@ -271,7 +272,7 @@ func (t *LocalTracker) Stop() {
 }
 
 func (t *LocalTracker) getRedisKey(stream PresenceStream, sessionID, userID uuid.UUID) string {
-	return fmt.Sprintf("%v_%v_%v_%v_%v_%v_%v", os.Getenv("HOSTNAME"), sessionID, userID, stream.Mode, stream.Subject, stream.Subcontext, stream.Label)
+	return fmt.Sprintf("%v_%v_%v_%v_%v_%v_%v", t.instanceID, sessionID, userID, stream.Mode, stream.Subject, stream.Subcontext, stream.Label)
 }
 
 func (t *LocalTracker) Track(ctx context.Context, sessionID uuid.UUID, stream PresenceStream, userID uuid.UUID, meta PresenceMeta, allowIfFirstForSession bool) (bool, bool) {
@@ -416,7 +417,7 @@ func (t *LocalTracker) Untrack(sessionID uuid.UUID, stream PresenceStream, userI
 	pc := presenceCompact{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: stream, UserID: userID}
 	t.Lock()
 
-	redisKey := fmt.Sprintf("%v_%v_%v", os.Getenv("HOSTNAME"), pc.Stream.Mode, pc.UserID)
+	redisKey := fmt.Sprintf("%v_%v_%v", t.instanceID, pc.Stream.Mode, pc.UserID)
 
 	t.logger.Info("redis_key", zap.String("redis_key", redisKey))
 
@@ -479,7 +480,7 @@ func (t *LocalTracker) UntrackMulti(sessionID uuid.UUID, streams []*PresenceStre
 
 	for _, stream := range streams {
 		pc := presenceCompact{ID: PresenceID{Node: t.name, SessionID: sessionID}, Stream: *stream, UserID: userID}
-		redisKey := fmt.Sprintf("%v_%v_%v", os.Getenv("HOSTNAME"), pc.Stream.Mode, pc.UserID)
+		redisKey := fmt.Sprintf("%v_%v_%v", t.instanceID, pc.Stream.Mode, pc.UserID)
 		t.redis.Del(context.Background(), redisKey)
 
 		bySession, anyTracked := t.presencesBySession[sessionID]
@@ -541,7 +542,7 @@ func (t *LocalTracker) UntrackMulti(sessionID uuid.UUID, streams []*PresenceStre
 func (t *LocalTracker) UntrackAll(sessionID uuid.UUID, reason runtime.PresenceReason) {
 	t.Lock()
 
-	keys, _, err := t.redis.Scan(context.Background(), 0, fmt.Sprintf("%v_%v_%v", os.Getenv("HOSTNAME"), sessionID, "*"), 10000).Result()
+	keys, _, err := t.redis.Scan(context.Background(), 0, fmt.Sprintf("%v_%v_%v", t.instanceID, sessionID, "*"), 10000).Result()
 	if err != nil {
 		panic(err)
 	}

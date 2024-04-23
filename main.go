@@ -18,6 +18,7 @@ import (
 	"context"
 	cryptoRand "crypto/rand"
 	"encoding/binary"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"github.com/redis/go-redis/v9"
@@ -61,6 +62,16 @@ var (
 		DiscardUnknown: false,
 	}
 )
+
+// generateRandomString to generate random identifier for each Nakama instance
+func generateRandomString(length int) (string, error) {
+	bytes := make([]byte, length/2)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
 
 func main() {
 	semver := fmt.Sprintf("%s+%s", version, commitID)
@@ -138,7 +149,7 @@ func main() {
 
 	redisAddress := os.Getenv("REDIS_ADDR")
 	if redisAddress == "" {
-		redisAddress = "host.docker.internal:6379"
+		redisAddress = "hos.docker.internal:6379"
 	}
 
 	rdb := redis.NewClient(&redis.Options{
@@ -153,6 +164,12 @@ func main() {
 		return
 	}
 
+	instanceID, err := generateRandomString(10)
+	if err != nil {
+		logger.Error("can't generate instance ID, %v", zap.Error(err))
+		return
+	}
+
 	// Start up server components.
 	cookie := newOrLoadCookie(config)
 	metrics := server.NewLocalMetrics(logger, startupLogger, db, config)
@@ -162,8 +179,8 @@ func main() {
 	consoleSessionCache := server.NewLocalSessionCache(config.GetConsole().TokenExpirySec)
 	loginAttemptCache := server.NewLocalLoginAttemptCache()
 	statusRegistry := server.NewStatusRegistry(logger, config, sessionRegistry, jsonpbMarshaler)
-	tracker := server.StartLocalTracker(logger, config, sessionRegistry, statusRegistry, metrics, jsonpbMarshaler, rdb)
-	router := server.NewLocalMessageRouter(logger, sessionRegistry, tracker, jsonpbMarshaler, rdb)
+	tracker := server.StartLocalTracker(logger, config, sessionRegistry, statusRegistry, metrics, jsonpbMarshaler, rdb, instanceID)
+	router := server.NewLocalMessageRouter(logger, sessionRegistry, tracker, jsonpbMarshaler, rdb, instanceID)
 	leaderboardCache := server.NewLocalLeaderboardCache(logger, startupLogger, db)
 	leaderboardRankCache := server.NewLocalLeaderboardRankCache(ctx, startupLogger, db, config.GetLeaderboard(), leaderboardCache)
 	leaderboardScheduler := server.NewLocalLeaderboardScheduler(logger, db, config, leaderboardCache, leaderboardRankCache)

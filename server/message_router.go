@@ -22,7 +22,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"os"
 )
 
 // Deferred message expected to be batched with other deferred messages.
@@ -48,6 +47,7 @@ type LocalMessageRouter struct {
 	sessionRegistry    SessionRegistry
 	tracker            Tracker
 	redis              *redis.Client
+	instanceID         string
 }
 
 type SSA struct {
@@ -72,7 +72,7 @@ func (r *LocalMessageRouter) SendToPresenceIDsNew(logger *zap.Logger, presenceID
 	//logger.Info("HERE", zap.Any("presenceIDs", presenceIDs))
 	if gossip {
 		if err := r.Share(logger, SSA{
-			SenderHost:  os.Getenv("HOSTNAME"),
+			SenderHost:  r.instanceID,
 			Envelope:    envelope,
 			PresenceIDs: presenceIDs,
 			Reliable:    reliable,
@@ -149,16 +149,17 @@ func (r *LocalMessageRouter) Share(logger *zap.Logger, data SSA) error {
 	return r.redis.Publish(context.Background(), "sharing", encoded1).Err()
 }
 
-func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, tracker Tracker, protojsonMarshaler *protojson.MarshalOptions, rdb *redis.Client) MessageRouter {
+func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, tracker Tracker, protojsonMarshaler *protojson.MarshalOptions, rdb *redis.Client, instanceID string) MessageRouter {
 
 	localMessageRouter := &LocalMessageRouter{
 		protojsonMarshaler: protojsonMarshaler,
 		sessionRegistry:    sessionRegistry,
 		tracker:            tracker,
 		redis:              rdb,
+		instanceID:         instanceID,
 	}
 
-	go func(localMessageRouter *LocalMessageRouter) {
+	go func(localMessageRouter *LocalMessageRouter, instanceID string) {
 		// There is no error because go-redis automatically reconnects on error.
 		pubsub := rdb.Subscribe(context.Background(), "sharing")
 
@@ -178,12 +179,12 @@ func NewLocalMessageRouter(logger *zap.Logger, sessionRegistry SessionRegistry, 
 			if err := proto.Unmarshal(b.Envelope, a); err != nil {
 				logger.Error("err1: ", zap.Error(err))
 			}
-			if b.SenderHost != os.Getenv("HOSTNAME") {
+			if b.SenderHost != instanceID {
 				localMessageRouter.SendToPresenceIDsNewA(logger, b.PresenceIDs, a, b.Reliable)
 			}
 
 		}
-	}(localMessageRouter)
+	}(localMessageRouter, instanceID)
 
 	return localMessageRouter
 }
