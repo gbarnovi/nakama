@@ -27,7 +27,7 @@ LABEL variant=nakama-pluginbuilder
 LABEL description="A support container to build Go code for Nakama server's runtime."
 
 ENV GOOS linux
-ENV GOARCH amd64
+ENV GOARCH arm64
 ENV CGO_ENABLED 1
 
 RUN apt-get update && \
