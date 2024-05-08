@@ -26,7 +26,7 @@ LABEL version=$version
 LABEL variant=nakama-pluginbuilder
 LABEL description="A support container to build Go code for Nakama server's runtime."
 
-ENV GOOS linux
+ENV GOOS darwin
 ENV GOARCH arm64
 ENV CGO_ENABLED 1
 
